@@ -1,12 +1,14 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel # 新增：用來定義資料格式
+from pydantic import BaseModel
 import yfinance as yf
 import pandas as pd
 import ta
 import requests
 from bs4 import BeautifulSoup
 import urllib.parse
+import time  # 🌟 新增：用來讓程式暫停
+from yfinance import exceptions # 🌟 新增：用來捕捉 Yahoo 的阻擋錯誤
 
 app = FastAPI()
 
@@ -67,7 +69,20 @@ def analyze_news_sentiment(ticker):
 
 @app.get("/analyze/{ticker}")
 def analyze_stock(ticker: str):
-    stock = yf.Ticker(ticker)
+    try:
+        stock = yf.Ticker(ticker)
+        hist_data = stock.history(period="6mo")
+
+        if hist_data.empty:
+            return {"error": "找不到該股票資料，請確認代號是否正確"}
+
+    except exceptions.YFRateLimitError:
+        # 🌟 攔截 Rate Limit 錯誤，避免伺服器崩潰
+        return {"error": "請求過於頻繁，遭到 Yahoo 暫時阻擋，請等待幾分鐘後再試。"}
+    except Exception as e:
+        return {"error": f"發生未知的資料讀取錯誤: {e}"}
+
+    # ... (下面原本算 SMA, RSI, 新聞的程式碼都不用動) ...
     
     hist_data = stock.history(period="6mo")
     if hist_data.empty:
@@ -126,18 +141,16 @@ class PortfolioRequest(BaseModel):
 def calculate_portfolio(portfolio: PortfolioRequest):
     total_value = 0
     details = []
-    
+
     for item in portfolio.items:
         try:
-            # 抓取最新一天的收盤價
             stock = yf.Ticker(item.ticker)
             hist_data = stock.history(period="1d")
-            
+
             if not hist_data.empty:
                 current_price = float(hist_data['Close'].iloc[-1])
                 asset_value = current_price * item.shares
                 total_value += asset_value
-                
                 details.append({
                     "ticker": item.ticker,
                     "shares": item.shares,
@@ -146,9 +159,15 @@ def calculate_portfolio(portfolio: PortfolioRequest):
                 })
             else:
                 details.append({"ticker": item.ticker, "error": "無報價資料"})
+
+        except exceptions.YFRateLimitError:
+            # 🌟 如果被 Yahoo 阻擋，給予明確提示
+            details.append({"ticker": item.ticker, "error": "被 Yahoo 阻擋，請稍後再試"})
         except Exception as e:
             details.append({"ticker": item.ticker, "error": str(e)})
-            
+
+        time.sleep(1) # 🌟 關鍵煞車：查完一檔後，強制休息 1 秒鐘再查下一檔
+
     return {
         "total_portfolio_value": round(total_value, 2),
         "details": details
