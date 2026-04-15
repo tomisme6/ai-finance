@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 投資理財與退休規劃系統</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-8 font-sans">
+
+    <div class="max-w-5xl mx-auto space-y-8">
+        
+        <div class="bg-white p-8 rounded-xl shadow-lg border-t-4 border-green-500">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6">🎯 我的退休財務藍圖</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div class="bg-gray-50 p-6 rounded-lg border flex flex-col">
+                    <h3 class="font-bold text-gray-700 mb-4 border-b pb-2">1. 輸入目前持股</h3>
+                    <div class="flex gap-2 mb-4">
+                        <input type="text" id="portTicker" placeholder="代號 (如 0050.TW)" class="flex-1 px-3 py-2 border rounded focus:ring-2 focus:ring-green-500">
+                        <input type="number" id="portShares" placeholder="股數" class="w-24 px-3 py-2 border rounded focus:ring-2 focus:ring-green-500">
+                        <button onclick="addAsset()" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition">+</button>
+                    </div>
+                    
+                    <ul id="assetList" class="mb-4 space-y-2 text-sm text-gray-600 flex-1"></ul>
+                    
+                    <div class="mt-auto">
+                        <div class="text-lg font-bold text-right text-gray-800 mb-4 border-t pt-4">
+                            目前總市值：NT$ <span id="totalValueDisplay" class="text-green-600">0</span>
+                        </div>
+                        <button onclick="syncAndAnalyze()" class="w-full bg-gray-800 text-white py-3 rounded hover:bg-gray-900 transition shadow-md font-bold text-lg">
+                            🔄 一鍵更新市值與 AI 診斷
+                        </button>
+                    </div>
+                </div>
+
+                <div class="bg-blue-50 p-6 rounded-lg border">
+                    <h3 class="font-bold text-gray-700 mb-4 border-b pb-2">2. 退休金試算</h3>
+                    <div class="space-y-3 text-sm">
+                        <div class="flex justify-between items-center">
+                            <label>目前年齡：</label>
+                            <input type="number" id="ageCurrent" onchange="saveSettings()" class="w-20 px-2 py-1 border rounded text-right">
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <label>預計退休年齡：</label>
+                            <input type="number" id="ageRetire" onchange="saveSettings()" class="w-20 px-2 py-1 border rounded text-right">
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <label>目標每月被動收入：</label>
+                            <input type="number" id="targetIncome" onchange="saveSettings()" class="w-24 px-2 py-1 border rounded text-right">
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <label>預估年化報酬率(%)：</label>
+                            <input type="number" id="expectedReturn" onchange="saveSettings()" step="0.5" class="w-20 px-2 py-1 border rounded text-right">
+                        </div>
+                        <div class="flex justify-between items-center border-t border-blue-200 pt-2 mt-2">
+                            <label class="font-bold text-gray-700">預留緊急備用金(NT$)：</label>
+                            <input type="number" id="emergencyFund" onchange="saveSettings()" step="10000" class="w-24 px-2 py-1 border rounded text-right border-blue-300">
+                        </div>
+                        <div class="flex justify-between items-center text-gray-500 pt-2">
+                            <label>目前已準備資金：</label>
+                            <span>NT$ <span id="currentSavingsText">0</span></span>
+                        </div>
+                    </div>
+                    <button onclick="calculateRetirement()" class="w-full mt-6 bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition font-bold">
+                        📊 進行試算
+                    </button>
+                    
+                    <div id="retirementResult" class="hidden mt-6 p-4 bg-white rounded border-l-4 border-blue-500 shadow-sm">
+                        <p class="text-gray-600 text-sm mb-1">達成目標還需累積本金 (含備用金)：</p>
+                        <p class="text-xl font-bold text-gray-800 mb-3">NT$ <span id="targetCorpus">0</span></p>
+                        <p class="text-gray-600 text-sm mb-1">為了在 <span id="yearsLeft">0</span> 年後退休，您現在每月需投入：</p>
+                        <p class="text-2xl font-bold text-blue-600">NT$ <span id="monthlyRequired">0</span></p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="holdingsAnalysisSection" class="mt-8 hidden">
+                <h3 class="text-xl font-bold text-purple-800 mb-4 border-b-2 border-purple-200 pb-2">📋 我的持股 AI 診斷報告</h3>
+                <div id="holdingsLoading" class="text-center text-gray-500 my-6 hidden">
+                    <span class="animate-pulse">🔄 正在同步市值並逐一分析您的持股，請稍候...</span>
+                </div>
+                <div id="holdingsCards" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+            </div>
+        </div>
+
+        <div class="bg-white p-8 rounded-xl shadow-lg border-t-4 border-blue-500">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6">🔍 單一標的探索雷達</h2>
+            <div class="flex gap-4 mb-2">
+                <input type="text" id="tickerInput" placeholder="輸入想觀察的新股票 (如 2330.TW, AAPL)" class="flex-1 px-4 py-2 border rounded focus:ring-2 focus:ring-blue-500">
+                <button onclick="analyzeStock()" class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition">開始分析</button>
+            </div>
+            
+            <div class="flex flex-wrap gap-2 items-center text-sm text-gray-500 mb-4" id="searchHistoryContainer">
+                <span>最近查詢：</span>
+                </div>
+
+            <div id="loading" class="hidden text-center text-gray-500 my-4">資料運算中...</div>
+            
+            <div id="resultArea" class="hidden bg-gray-50 p-4 border rounded mt-4 shadow-sm">
+                 <h3 class="text-lg font-bold text-gray-800" id="stockName"></h3>
+                 <p class="text-blue-600 font-bold mb-2 mt-1" id="finalSignal"></p>
+                 <div class="text-sm text-gray-600 mt-2 bg-white p-3 rounded border">
+                    <p>最新價: <span id="price" class="font-semibold text-gray-800"></span> | 月線: <span id="sma" class="font-semibold"></span> | RSI: <span id="rsi" class="font-semibold"></span> | 情緒分數: <span id="newsScore" class="font-semibold"></span></p>
+                 </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. 資料初始化與讀取 ---
+        let portfolioAssets = JSON.parse(localStorage.getItem('myPortfolio')) || [];
+        let currentTotalPortfolioValue = 0;
+        
+        // 讀取歷史查詢紀錄，沒有則給空陣列
+        let searchHistory = JSON.parse(localStorage.getItem('searchHistory')) || [];
+
+        // 讀取計算機設定，若無則給預設值
+        let defaultSettings = {
+            ageCurrent: 34, ageRetire: 60, targetIncome: 30000, 
+            expectedReturn: 10, emergencyFund: 180000
+        };
+        let appSettings = JSON.parse(localStorage.getItem('appSettings')) || defaultSettings;
+
+        // 網頁載入時執行
+        window.onload = function() {
+            updateAssetListUI();
+            loadSettingsToUI();
+            renderSearchHistory();
+        };
+
+        // --- 2. 退休計算機設定儲存 ---
+        function loadSettingsToUI() {
+            document.getElementById('ageCurrent').value = appSettings.ageCurrent;
+            document.getElementById('ageRetire').value = appSettings.ageRetire;
+            document.getElementById('targetIncome').value = appSettings.targetIncome;
+            document.getElementById('expectedReturn').value = appSettings.expectedReturn;
+            document.getElementById('emergencyFund').value = appSettings.emergencyFund;
+        }
+
+        function saveSettings() {
+            appSettings = {
+                ageCurrent: document.getElementById('ageCurrent').value,
+                ageRetire: document.getElementById('ageRetire').value,
+                targetIncome: document.getElementById('targetIncome').value,
+                expectedReturn: document.getElementById('expectedReturn').value,
+                emergencyFund: document.getElementById('emergencyFund').value
+            };
+            localStorage.setItem('appSettings', JSON.stringify(appSettings));
+        }
+
+        // --- 3. 持股清單邏輯 ---
+        function savePortfolio() {
+            localStorage.setItem('myPortfolio', JSON.stringify(portfolioAssets));
+        }
+
+        function addAsset() {
+            const ticker = document.getElementById('portTicker').value.toUpperCase().trim();
+            const shares = parseFloat(document.getElementById('portShares').value);
+            if (ticker && shares > 0) {
+                const existing = portfolioAssets.find(a => a.ticker === ticker);
+                if (existing) existing.shares += shares;
+                else portfolioAssets.push({ ticker, shares });
+                savePortfolio();
+                updateAssetListUI();
+                document.getElementById('portTicker').value = '';
+                document.getElementById('portShares').value = '';
+            }
+        }
+
+        function removeAsset(index) {
+            portfolioAssets.splice(index, 1);
+            savePortfolio();
+            updateAssetListUI();
+        }
+
+        function editAsset(index) {
+            const asset = portfolioAssets[index];
+            document.getElementById('portTicker').value = asset.ticker;
+            document.getElementById('portShares').value = asset.shares;
+            removeAsset(index);
+            document.getElementById('portShares').focus();
+        }
+
+        function updateAssetListUI() {
+            const list = document.getElementById('assetList');
+            list.innerHTML = '';
+            portfolioAssets.forEach((asset, index) => {
+                list.innerHTML += `
+                <li class="flex justify-between items-center border-b pb-2 mt-2">
+                    <div><span class="font-bold text-gray-800">${asset.ticker}</span><span class="text-gray-600 ml-2">${asset.shares} 股</span></div>
+                    <div class="space-x-2">
+                        <button onclick="editAsset(${index})" class="text-blue-600 hover:text-blue-800 text-sm px-3 py-1 bg-blue-100 rounded transition">修改</button>
+                        <button onclick="removeAsset(${index})" class="text-red-600 hover:text-red-800 text-sm px-3 py-1 bg-red-100 rounded transition">刪除</button>
+                    </div>
+                </li>`;
+            });
+        }
+
+        // --- 4. 歷史搜尋紀錄邏輯 ---
+        function renderSearchHistory() {
+            const container = document.getElementById('searchHistoryContainer');
+            // 保留原本的「最近查詢：」文字，清空後面的標籤
+            container.innerHTML = '<span>最近查詢：</span>'; 
+            
+            if(searchHistory.length === 0) {
+                container.innerHTML += '<span class="text-gray-400">尚無紀錄</span>';
+                return;
+            }
+
+            searchHistory.forEach(ticker => {
+                // 建立可點擊的歷史標籤
+                container.innerHTML += `
+                    <button onclick="searchFromHistory('${ticker}')" 
+                            class="bg-gray-200 hover:bg-blue-100 text-gray-700 hover:text-blue-700 px-3 py-1 rounded-full text-xs font-bold transition">
+                        ${ticker}
+                    </button>
+                `;
+            });
+        }
+
+        function searchFromHistory(ticker) {
+            document.getElementById('tickerInput').value = ticker;
+            analyzeStock(); // 直接觸發搜尋
+        }
+
+        function saveSearchHistory(ticker) {
+            // 檢查是否已經在紀錄中，若是則移除舊的（為了把它移到最前面）
+            searchHistory = searchHistory.filter(item => item !== ticker);
+            // 加到陣列最前面
+            searchHistory.unshift(ticker);
+            // 最多只保留 5 筆紀錄
+            if(searchHistory.length > 5) searchHistory.pop();
+            
+            localStorage.setItem('searchHistory', JSON.stringify(searchHistory));
+            renderSearchHistory();
+        }
+
+        // --- 5. 與後端溝通邏輯 (保持不變) ---
+        async function syncAndAnalyze() {
+            if (portfolioAssets.length === 0) return alert("請先新增持股！");
+            const section = document.getElementById('holdingsAnalysisSection');
+            const loading = document.getElementById('holdingsLoading');
+            const cardsContainer = document.getElementById('holdingsCards');
+            section.classList.remove('hidden');
+            loading.classList.remove('hidden');
+            cardsContainer.innerHTML = '';
+
+            try {
+                const response = await fetch('http://127.0.0.1:8000/calculate_portfolio', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ items: portfolioAssets })
+                });
+                const data = await response.json();
+                currentTotalPortfolioValue = data.total_portfolio_value;
+                document.getElementById('totalValueDisplay').innerText = currentTotalPortfolioValue.toLocaleString();
+                document.getElementById('currentSavingsText').innerText = currentTotalPortfolioValue.toLocaleString();
+                await analyzeMyHoldings();
+            } catch (e) {
+                alert("無法連線到伺服器計算市值，請確認後端正在運行");
+                loading.classList.add('hidden');
+            }
+        }
+
+        async function analyzeMyHoldings() {
+            const cardsContainer = document.getElementById('holdingsCards');
+            const loading = document.getElementById('holdingsLoading');
+            for (const asset of portfolioAssets) {
+                try {
+                    const response = await fetch(`http://127.0.0.1:8000/analyze/${asset.ticker}`);
+                    const data = await response.json();
+                    if(data.error) {
+                        cardsContainer.innerHTML += `<div class="bg-red-50 p-4 rounded-lg border border-red-200"><h4 class="font-bold text-red-700">${asset.ticker}</h4><p class="text-sm text-red-600 mt-1">${data.error}</p></div>`;
+                        continue;
+                    }
+                    let borderColor = "border-gray-200";
+                    if(data.final_signal.includes("強烈建議關注")) borderColor = "border-green-400";
+                    if(data.final_signal.includes("留意追高風險") || data.final_signal.includes("技術面漂亮")) borderColor = "border-yellow-400";
+                    if(data.final_signal.includes("建議觀望")) borderColor = "border-red-300";
+
+                    cardsContainer.innerHTML += `
+                        <div class="bg-white p-4 rounded-lg border-l-4 ${borderColor} shadow-sm hover:shadow-md transition">
+                            <div class="flex justify-between items-center mb-2 border-b pb-2">
+                                <h4 class="font-bold text-lg text-gray-800">${data.stock}</h4>
+                                <span class="bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded font-mono">最新價: $${data.technical_analysis.price}</span>
+                            </div>
+                            <p class="text-sm font-bold text-indigo-700 mb-3">${data.final_signal}</p>
+                            <div class="grid grid-cols-2 gap-2 text-xs text-gray-600 bg-gray-50 p-2 rounded">
+                                <div>📈 趨勢: <span class="font-bold text-gray-800">${data.technical_analysis.trend}</span></div>
+                                <div>📊 RSI: <span class="font-bold text-gray-800">${data.technical_analysis.rsi_14}</span></div>
+                                <div class="col-span-2">📰 消息情緒: <span class="font-bold text-gray-800">${data.news_analysis.market_sentiment}</span> (分數: ${data.news_analysis.average_sentiment_score})</div>
+                            </div>
+                        </div>`;
+                } catch (e) {
+                    cardsContainer.innerHTML += `<div class="bg-red-50 p-4 rounded-lg border border-red-200"><h4 class="font-bold text-red-700">${asset.ticker}</h4><p class="text-sm text-red-600 mt-1">連線失敗</p></div>`;
+                }
+            }
+            loading.classList.add('hidden');
+        }
+
+        function calculateRetirement() {
+            const currentAge = parseInt(document.getElementById('ageCurrent').value);
+            const retireAge = parseInt(document.getElementById('ageRetire').value);
+            const targetIncome = parseInt(document.getElementById('targetIncome').value);
+            const expectedReturn = parseFloat(document.getElementById('expectedReturn').value) / 100;
+            const emergencyFund = parseInt(document.getElementById('emergencyFund').value) || 0;
+            
+            const yearsToInvest = retireAge - currentAge;
+            if(yearsToInvest <= 0) return alert("退休年齡必須大於目前年齡！");
+
+            const incomeCorpus = (targetIncome * 12) / 0.05;
+            const targetCorpus = incomeCorpus + emergencyFund;
+            const monthlyRate = expectedReturn / 12;
+            const months = yearsToInvest * 12;
+            const futureValueOfCurrentSavings = currentTotalPortfolioValue * Math.pow(1 + expectedReturn, yearsToInvest);
+            const remainingCorpusNeeded = targetCorpus - futureValueOfCurrentSavings;
+
+            let pmt = 0;
+            if (remainingCorpusNeeded > 0) pmt = (remainingCorpusNeeded * monthlyRate) / (Math.pow(1 + monthlyRate, months) - 1);
+
+            document.getElementById('targetCorpus').innerText = Math.round(targetCorpus).toLocaleString();
+            document.getElementById('yearsLeft').innerText = yearsToInvest;
+            document.getElementById('monthlyRequired').innerText = pmt > 0 ? Math.round(pmt).toLocaleString() : "0 (您已提早達標！)";
+            document.getElementById('retirementResult').classList.remove('hidden');
+        }
+
+        async function analyzeStock() {
+            const ticker = document.getElementById('tickerInput').value.trim().toUpperCase();
+            if(!ticker) return;
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('resultArea').classList.add('hidden');
+            try {
+                const response = await fetch(`http://127.0.0.1:8000/analyze/${ticker}`);
+                const data = await response.json();
+                if(data.error) return alert(data.error);
+
+                document.getElementById('stockName').innerText = data.stock;
+                document.getElementById('finalSignal').innerText = data.final_signal;
+                document.getElementById('price').innerText = data.technical_analysis.price;
+                document.getElementById('sma').innerText = data.technical_analysis.sma_20;
+                document.getElementById('rsi').innerText = data.technical_analysis.rsi_14;
+                document.getElementById('newsScore').innerText = data.news_analysis.average_sentiment_score;
+                document.getElementById('resultArea').classList.remove('hidden');
+                
+                // 🌟 查詢成功後，將標的存入歷史紀錄
+                saveSearchHistory(ticker);
+            } catch (e) {
+                alert("分析失敗，請檢查伺服器是否正常運行");
+            } finally {
+                document.getElementById('loading').classList.add('hidden');
+            }
+        }
+    </script>
+</body>
+</html>
