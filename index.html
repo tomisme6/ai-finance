@@ -27,8 +27,8 @@
                     <p class="text-xl font-bold text-white" id="totalValueDisplay">0</p>
                 </div>
                 <div class="bg-[#1e293b] p-4 rounded-2xl border border-slate-700/50 shadow-lg">
-                    <p class="text-xs text-slate-400 mb-1">總損益</p>
-                    <p class="text-xl font-bold text-slate-500">—</p>
+                    <p class="text-xs text-slate-400 mb-1">總損益 (NT$)</p>
+                    <p class="text-xl font-bold text-slate-500" id="totalPLDisplay">—</p>
                 </div>
             </div>
 
@@ -50,7 +50,7 @@
             <ul id="assetList" class="space-y-2"></ul>
             
             <button onclick="syncAndAnalyze()" id="syncBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl transition shadow-lg font-bold mt-4">
-                🔄 一鍵更新市值
+                🔄 一鍵更新市值與損益
             </button>
         </div>
 
@@ -93,7 +93,7 @@
             <div class="bg-[#1e293b] p-6 rounded-2xl border border-slate-700/50 text-center">
                 <span class="text-4xl mb-3 block">🔍</span>
                 <h3 class="text-lg font-bold text-white mb-2">多條件選股篩選器</h3>
-                <p class="text-sm text-slate-400">未來可自訂條件（例如：RSI < 30 且股價站上月線）來掃描市場。</p>
+                <p class="text-sm text-slate-400">未來可自訂條件（例如：RSI &lt; 30 且股價站上月線）來掃描市場。</p>
                 <button class="mt-4 bg-slate-700 text-slate-300 px-6 py-2 rounded-lg text-sm cursor-not-allowed">建置中 (Coming Soon)</button>
             </div>
         </div>
@@ -115,8 +115,16 @@
                         <input type="number" id="targetIncome" onchange="saveSettings()" class="w-24 bg-[#0f172a] border border-slate-600 rounded-lg px-2 py-1 text-center text-white focus:border-blue-500">
                     </div>
                     <div class="flex justify-between items-center">
-                        <label>緊急備用金</label>
+                        <label>預估投資報酬率 (%)</label>
+                        <input type="number" id="expectedReturn" onchange="saveSettings()" step="0.5" class="w-20 bg-[#0f172a] border border-slate-600 rounded-lg px-2 py-1 text-center text-white focus:border-blue-500">
+                    </div>
+                    <div class="flex justify-between items-center border-t border-slate-700 pt-3 mt-3">
+                        <label class="text-blue-400 font-bold">緊急備用金</label>
                         <input type="number" id="emergencyFund" onchange="saveSettings()" step="10000" class="w-24 bg-[#0f172a] border border-slate-600 rounded-lg px-2 py-1 text-center text-blue-400 focus:border-blue-500">
+                    </div>
+                    <div class="flex justify-between items-center text-slate-500 pt-2 text-xs">
+                        <label>當前庫存總市值</label>
+                        <span>NT$ <span id="currentSavingsText">0</span></span>
                     </div>
                 </div>
                 <button onclick="calculateRetirement()" class="w-full mt-6 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold transition">開始試算</button>
@@ -158,27 +166,23 @@
     <script>
         const BACKEND_URL = "https://my-ai-finance.onrender.com";
 
-        // === 📱 切換分頁核心邏輯 ===
+        // === 📱 分頁切換邏輯 ===
         function switchTab(tabId, title, subtitle) {
-            // 隱藏所有內容
             document.querySelectorAll('.page-content').forEach(el => el.classList.add('hidden'));
-            // 移除所有按鈕的 active 狀態顏色
             document.querySelectorAll('.nav-btn').forEach(btn => {
                 btn.classList.remove('text-blue-500');
                 btn.classList.add('text-slate-500');
             });
             
-            // 顯示目標內容與按鈕變色
             document.getElementById(`tab-${tabId}`).classList.remove('hidden');
             document.querySelector(`[data-target="tab-${tabId}"]`).classList.remove('text-slate-500');
             document.querySelector(`[data-target="tab-${tabId}"]`).classList.add('text-blue-500');
 
-            // 動態更改頂部標題
             document.getElementById('pageTitle').innerText = title;
             document.getElementById('pageSubtitle').innerText = subtitle;
         }
 
-        // === 以下為原有功能資料 (省略部分長度以保持清晰) ===
+        // === 資料初始化 ===
         let portfolioAssets = JSON.parse(localStorage.getItem('myPortfolio')) || [];
         let searchHistory = JSON.parse(localStorage.getItem('searchHistory')) || [];
         let defaultSettings = { ageCurrent: 34, ageRetire: 60, targetIncome: 30000, expectedReturn: 10, emergencyFund: 180000 };
@@ -189,60 +193,108 @@
             updateAssetListUI();
             loadSettingsToUI();
             renderSearchHistory();
+            
+            // 初始載入時，將首頁的市值同步至退休計算機的顯示
+            let savedValue = localStorage.getItem('lastPortfolioValue');
+            if(savedValue) {
+                currentTotalPortfolioValue = parseFloat(savedValue);
+                document.getElementById('totalValueDisplay').innerText = currentTotalPortfolioValue.toLocaleString();
+                document.getElementById('currentSavingsText').innerText = currentTotalPortfolioValue.toLocaleString();
+            }
         };
 
+        // === 💰 持倉與損益邏輯 ===
         function savePortfolio() { localStorage.setItem('myPortfolio', JSON.stringify(portfolioAssets)); }
 
-        // 修改 addAsset 以適應新的輸入框 UI (增加了成本價的預留)
+        // 🌟 更新：新增成本價寫入邏輯
         function addAsset() {
             const ticker = document.getElementById('portTicker').value.toUpperCase().trim();
             const shares = parseFloat(document.getElementById('portShares').value);
-            // const cost = parseFloat(document.getElementById('portCost').value); // 未來串接損益用
+            const cost = parseFloat(document.getElementById('portCost').value) || 0; // 取得成本價，無則為 0
+            
             if (ticker && shares > 0) {
-                const existing = portfolioAssets.find(a => a.ticker === ticker);
-                if (existing) existing.shares += shares;
-                else portfolioAssets.push({ ticker, shares });
-                savePortfolio(); updateAssetListUI();
-                document.getElementById('portTicker').value = ''; document.getElementById('portShares').value = '';
+                const existingIndex = portfolioAssets.findIndex(a => a.ticker === ticker);
+                if (existingIndex > -1) {
+                    portfolioAssets[existingIndex].shares += shares;
+                    portfolioAssets[existingIndex].cost = cost; // 若重複輸入，更新為新成本
+                } else {
+                    portfolioAssets.push({ ticker, shares, cost });
+                }
+                savePortfolio(); 
+                updateAssetListUI();
+                document.getElementById('portTicker').value = ''; 
+                document.getElementById('portShares').value = '';
                 document.getElementById('portCost').value = '';
             }
         }
 
-        function removeAsset(index) { portfolioAssets.splice(index, 1); savePortfolio(); updateAssetListUI(); }
+        function removeAsset(index) { 
+            portfolioAssets.splice(index, 1); 
+            savePortfolio(); 
+            updateAssetListUI(); 
+        }
 
-        // 更新清單 UI (暗黑模式版)
+        // 🌟 更新：UI 顯示持股成本
         function updateAssetListUI() {
             const list = document.getElementById('assetList');
             list.innerHTML = '';
             portfolioAssets.forEach((asset, index) => {
+                let costText = asset.cost > 0 ? `成本 $${asset.cost}` : '未填成本';
                 list.innerHTML += `
                 <li class="flex justify-between items-center bg-[#1e293b] p-3 rounded-xl border border-slate-700/50">
                     <div>
                         <span class="font-bold text-slate-200">${asset.ticker}</span>
-                        <span class="text-slate-500 ml-2 text-xs">${asset.shares} 股</span>
+                        <span class="text-slate-500 ml-2 text-xs">${asset.shares} 股 / ${costText}</span>
                     </div>
                     <button onclick="removeAsset(${index})" class="text-slate-500 hover:text-red-400 p-1 transition">✕</button>
                 </li>`;
             });
         }
 
-        // --- 與後端串接的邏輯保留 ---
+        // 🌟 更新：呼叫後端並渲染「總損益」
         async function syncAndAnalyze() {
-            if (portfolioAssets.length === 0) return alert("清單是空的！");
+            if (portfolioAssets.length === 0) return alert("請先新增持倉標的！");
             const btn = document.getElementById('syncBtn');
-            btn.innerHTML = "⏳ 同步中...";
+            btn.innerHTML = "⏳ 同步雲端資料中...";
+            
             try {
                 const response = await fetch(`${BACKEND_URL}/calculate_portfolio`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: portfolioAssets })
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' }, 
+                    body: JSON.stringify({ items: portfolioAssets })
                 });
                 const data = await response.json();
+                
+                // 更新總市值
                 currentTotalPortfolioValue = data.total_portfolio_value;
                 document.getElementById('totalValueDisplay').innerText = currentTotalPortfolioValue.toLocaleString();
-            } catch (e) { alert("連線異常"); } 
-            finally { btn.innerHTML = "🔄 一鍵更新市值"; }
+                document.getElementById('currentSavingsText').innerText = currentTotalPortfolioValue.toLocaleString();
+                localStorage.setItem('lastPortfolioValue', currentTotalPortfolioValue); // 記憶總市值
+                
+                // 🌟 更新總損益與顏色 (台灣習慣：紅漲綠跌)
+                const plEl = document.getElementById('totalPLDisplay');
+                const plValue = data.total_profit_loss;
+                const plRatio = data.profit_loss_ratio;
+                
+                plEl.innerText = `${plValue > 0 ? '+' : ''}${plValue.toLocaleString()} (${plRatio}%)`;
+                
+                if (plValue > 0) {
+                    plEl.className = "text-xl font-bold text-red-500"; // 賺錢顯示紅色
+                } else if (plValue < 0) {
+                    plEl.className = "text-xl font-bold text-green-500"; // 賠錢顯示綠色
+                } else {
+                    plEl.className = "text-xl font-bold text-slate-400"; // 沒賺沒賠
+                }
+
+            } catch (e) { 
+                console.error(e);
+                alert("連線異常：Render 伺服器可能正在喚醒中，請稍待 30 秒後再試。"); 
+            } finally { 
+                btn.innerHTML = "🔄 一鍵更新市值與損益"; 
+            }
         }
 
-        // --- 單一探索邏輯 ---
+        // === 🔍 單一探索邏輯 ===
         function renderSearchHistory() {
             const container = document.getElementById('searchHistoryContainer');
             container.innerHTML = '<span>紀錄：</span>';
@@ -274,10 +326,10 @@
                 searchHistory = [ticker, ...searchHistory.filter(t => t !== ticker)].slice(0, 5);
                 localStorage.setItem('searchHistory', JSON.stringify(searchHistory));
                 renderSearchHistory();
-            } catch (e) { alert("連線失敗"); } finally { document.getElementById('loading').classList.add('hidden'); }
+            } catch (e) { alert("分析失敗，請檢查連線"); } finally { document.getElementById('loading').classList.add('hidden'); }
         }
 
-        // --- 退休金邏輯 ---
+        // === 🎯 退休金邏輯 ===
         function loadSettingsToUI() {
             document.getElementById('ageCurrent').value = appSettings.ageCurrent;
             document.getElementById('ageRetire').value = appSettings.ageRetire;
@@ -285,29 +337,38 @@
             document.getElementById('expectedReturn').value = appSettings.expectedReturn;
             document.getElementById('emergencyFund').value = appSettings.emergencyFund;
         }
+
         function saveSettings() {
             appSettings = {
-                ageCurrent: document.getElementById('ageCurrent').value, ageRetire: document.getElementById('ageRetire').value,
-                targetIncome: document.getElementById('targetIncome').value, expectedReturn: document.getElementById('expectedReturn').value,
+                ageCurrent: document.getElementById('ageCurrent').value, 
+                ageRetire: document.getElementById('ageRetire').value,
+                targetIncome: document.getElementById('targetIncome').value, 
+                expectedReturn: document.getElementById('expectedReturn').value,
                 emergencyFund: document.getElementById('emergencyFund').value
             };
             localStorage.setItem('appSettings', JSON.stringify(appSettings));
         }
+
         function calculateRetirement() {
-            const cAge = parseInt(document.getElementById('ageCurrent').value); const rAge = parseInt(document.getElementById('ageRetire').value);
-            const targetIncome = parseInt(document.getElementById('targetIncome').value); const expectedReturn = parseFloat(document.getElementById('expectedReturn').value) / 100;
+            const cAge = parseInt(document.getElementById('ageCurrent').value); 
+            const rAge = parseInt(document.getElementById('ageRetire').value);
+            const targetIncome = parseInt(document.getElementById('targetIncome').value); 
+            const expectedReturn = parseFloat(document.getElementById('expectedReturn').value) / 100;
             const emergency = parseInt(document.getElementById('emergencyFund').value) || 0;
-            const years = rAge - cAge; if(years <= 0) return alert("退休年紀必須大於目前年紀！");
+            const years = rAge - cAge; 
+            if(years <= 0) return alert("退休年紀必須大於目前年紀！");
 
             const targetCorpus = ((targetIncome * 12) / 0.05) + emergency;
-            const mRate = expectedReturn / 12; const months = years * 12;
+            const mRate = expectedReturn / 12; 
+            const months = years * 12;
             const fv = currentTotalPortfolioValue * Math.pow(1 + expectedReturn, years);
             const needed = targetCorpus - fv;
-            let pmt = 0; if (needed > 0) pmt = (needed * mRate) / (Math.pow(1 + mRate, months) - 1);
+            let pmt = 0; 
+            if (needed > 0) pmt = (needed * mRate) / (Math.pow(1 + mRate, months) - 1);
 
             document.getElementById('targetCorpus').innerText = Math.round(targetCorpus).toLocaleString();
             document.getElementById('yearsLeft').innerText = years;
-            document.getElementById('monthlyRequired').innerText = pmt > 0 ? Math.round(pmt).toLocaleString() : "0 (達標！)";
+            document.getElementById('monthlyRequired').innerText = pmt > 0 ? Math.round(pmt).toLocaleString() : "0 (恭喜達標！)";
             document.getElementById('retirementResult').classList.remove('hidden');
         }
     </script>
