@@ -3,93 +3,269 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI 投資大師雷達</title>
+    <title>AI 財務自由雷達 (終極完整版)</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <style> ::-webkit-scrollbar { display: none; } </style>
+    <style>
+        ::-webkit-scrollbar { display: none; }
+        body { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
 </head>
-<body class="bg-[#0f172a] text-slate-200 h-screen flex flex-col font-sans">
+<body class="bg-[#0f172a] text-slate-200 h-screen flex flex-col font-sans selection:bg-blue-500 selection:text-white">
 
-    <div id="tab-screener" class="page-content hidden space-y-4 p-4">
-        <div class="bg-[#1e293b] p-5 rounded-2xl border border-slate-700/50 shadow-lg">
-            <h3 class="text-lg font-bold text-white flex items-center gap-2">
-                <span>🎩</span> 大師選股篩選器
-            </h3>
-            <p class="text-xs text-slate-400 mt-2">點擊下方市場，AI 將自動掃描藍籌股，尋找符合巴菲特與林奇邏輯的標的。</p>
+    <header class="bg-[#1e293b] p-4 shadow-md sticky top-0 z-10 border-b border-slate-700/50">
+        <h1 class="text-xl font-bold text-white tracking-wide" id="pageTitle">我的持倉</h1>
+        <p class="text-xs text-slate-400 mt-1" id="pageSubtitle">巴菲特 × 林奇 投資雷達</p>
+    </header>
+
+    <main class="flex-1 overflow-y-auto p-4 pb-24">
+        
+        <div id="tab-portfolio" class="page-content space-y-4">
+            <div class="grid grid-cols-2 gap-3">
+                <div class="bg-[#1e293b] p-4 rounded-2xl border border-slate-700/50 shadow-lg">
+                    <p class="text-xs text-slate-400 mb-1">總市值 (NT$)</p>
+                    <p class="text-xl font-bold text-white" id="totalValueDisplay">0</p>
+                </div>
+                <div class="bg-[#1e293b] p-4 rounded-2xl border border-slate-700/50 shadow-lg">
+                    <p class="text-xs text-slate-400 mb-1">總損益 (NT$)</p>
+                    <p class="text-xl font-bold text-slate-500" id="totalPLDisplay">—</p>
+                </div>
+            </div>
+
+            <div class="bg-[#1e293b] p-5 rounded-2xl border border-slate-700/50 shadow-lg mt-4">
+                <h3 class="text-sm font-bold text-slate-300 mb-4">新增持倉</h3>
+                <div class="space-y-3">
+                    <input type="text" id="portTicker" placeholder="代號：0050、AAPL..." class="w-full bg-[#0f172a] border border-slate-600 rounded-xl px-4 py-3 text-white focus:border-blue-500 focus:outline-none">
+                    <div class="grid grid-cols-2 gap-3">
+                        <input type="number" id="portShares" placeholder="股數 / 單位" class="bg-[#0f172a] border border-slate-600 rounded-xl px-4 py-3 text-white focus:border-blue-500 focus:outline-none">
+                        <input type="number" id="portCost" placeholder="成本價 (選填)" class="bg-[#0f172a] border border-slate-600 rounded-xl px-4 py-3 text-white focus:border-blue-500 focus:outline-none">
+                    </div>
+                    <button onclick="addAsset()" class="w-full bg-[#166534] hover:bg-[#15803d] text-green-100 font-bold py-3 rounded-xl transition shadow-lg">＋ 新增到持倉</button>
+                </div>
+            </div>
+
+            <h3 class="text-sm font-bold text-slate-400 mt-6 mb-2 px-1">現有資產</h3>
+            <ul id="assetList" class="space-y-2"></ul>
             
-            <div class="grid grid-cols-2 gap-3 mt-6">
-                <button onclick="runScreener('TW')" class="bg-[#166534] py-3 rounded-xl font-bold border border-green-700">掃描台股 50 強</button>
-                <button onclick="runScreener('US')" class="bg-[#1e40af] py-3 rounded-xl font-bold border border-blue-700 text-blue-100">掃描美股科技巨頭</button>
+            <button onclick="syncAndAnalyze()" id="syncBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl transition shadow-lg font-bold mt-4">🔄 一鍵更新市值與損益</button>
+        </div>
+
+        <div id="tab-radar" class="page-content hidden space-y-4">
+            <div class="bg-[#1e293b] p-5 rounded-2xl border border-slate-700/50 shadow-lg">
+                <div class="flex items-center gap-2 mb-2"><span class="text-2xl">📡</span><h3 class="text-lg font-bold text-white">AI 每日選股雷達</h3></div>
+                <p class="text-xs text-slate-400 mb-4">掃描下方清單，自動篩選「技術面轉強」或「消息面偏多」的潛力標的。</p>
+                <div class="mb-4">
+                    <label class="text-xs font-bold text-indigo-400 block mb-2">雷達掃描清單 (請用逗號分隔代號)</label>
+                    <textarea id="radarListInput" onchange="saveRadarList()" class="w-full bg-[#0f172a] border border-slate-600 rounded-xl px-3 py-3 text-slate-300 text-sm focus:border-indigo-500 focus:outline-none" rows="3" placeholder="例如: 2330.TW, AAPL, NVDA"></textarea>
+                </div>
+                <button onclick="startRadar()" id="radarBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-xl transition shadow-lg font-bold">🚀 啟動今日雷達掃描</button>
+            </div>
+            <div id="radarProgress" class="hidden text-center text-sm text-indigo-400 font-medium animate-pulse mt-4">正在分析 <span id="radarCurrentStock" class="text-white ml-1 font-bold"></span> ...</div>
+            <div id="radarResults" class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2"></div>
+        </div>
+
+        <div id="tab-explore" class="page-content hidden space-y-4">
+            <div class="bg-[#1e293b] p-5 rounded-2xl border border-slate-700/50 shadow-lg">
+                <div class="flex gap-2 mb-4">
+                    <input type="text" id="tickerInput" placeholder="輸入標的 (如 2330.TW)" class="flex-1 bg-[#0f172a] border border-slate-600 rounded-xl px-4 py-3 text-white focus:border-blue-500 focus:outline-none">
+                    <button onclick="analyzeStock()" class="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 font-bold">搜尋</button>
+                </div>
+                <div id="searchHistoryContainer" class="flex flex-wrap gap-2 text-xs text-slate-400 mb-2"></div>
+            </div>
+            <div id="loading" class="hidden text-center py-4 text-blue-400 animate-pulse text-sm">正在分析技術與消息面...</div>
+            <div id="resultArea" class="hidden bg-[#1e293b] p-5 rounded-2xl border border-slate-700/50 shadow-lg">
+                 <div class="flex justify-between items-start mb-4"><h3 class="text-2xl font-black text-white" id="stockName"></h3><span class="bg-blue-900/50 border border-blue-700 text-blue-300 px-3 py-1 rounded-full text-sm font-bold" id="priceLabel"></span></div>
+                 <p class="text-sm text-indigo-300 font-bold bg-[#0f172a] p-3 rounded-lg mb-4" id="finalSignal"></p>
+                 <div class="grid grid-cols-4 gap-2 text-center text-xs">
+                    <div class="bg-[#0f172a] p-2 rounded-lg border border-slate-700"><p class="text-slate-500 mb-1">月線</p><p class="font-bold text-slate-200" id="sma"></p></div>
+                    <div class="bg-[#0f172a] p-2 rounded-lg border border-slate-700"><p class="text-slate-500 mb-1">RSI</p><p class="font-bold text-slate-200" id="rsi"></p></div>
+                    <div class="bg-[#0f172a] p-2 rounded-lg border border-slate-700"><p class="text-slate-500 mb-1">情緒</p><p class="font-bold text-slate-200" id="newsScore"></p></div>
+                    <div class="bg-[#0f172a] p-2 rounded-lg border border-slate-700"><p class="text-slate-500 mb-1">氛圍</p><p class="font-bold text-slate-200" id="sentimentLabel"></p></div>
+                 </div>
             </div>
         </div>
 
-        <div id="screenerProgress" class="hidden bg-indigo-900/30 p-4 rounded-xl text-center text-sm border border-indigo-500/30 animate-pulse">
-            🔍 AI 正在面試：<span id="currentScanning"></span> ...
+        <div id="tab-screener" class="page-content hidden space-y-4">
+            <div class="bg-[#1e293b] p-5 rounded-2xl border border-slate-700/50 shadow-lg">
+                <h3 class="text-lg font-bold text-white flex items-center gap-2"><span>🎩</span> 大師選股篩選器</h3>
+                <p class="text-xs text-slate-400 mt-2">點擊下方按鈕，AI 將自動掃描藍籌股，尋找符合巴菲特與林奇邏輯的標的。</p>
+                <div class="grid grid-cols-2 gap-3 mt-6">
+                    <button onclick="runScreener('TW')" class="bg-[#166534] py-3 rounded-xl font-bold border border-green-700">掃描台股 50 強</button>
+                    <button onclick="runScreener('US')" class="bg-[#1e40af] py-3 rounded-xl font-bold border border-blue-700 text-blue-100">掃描美股巨頭</button>
+                </div>
+            </div>
+            <div id="screenerProgress" class="hidden bg-indigo-900/30 p-4 rounded-xl text-center text-sm border border-indigo-500/30 animate-pulse">
+                🔍 AI 正在面試：<span id="currentScanning" class="font-bold ml-1"></span> ...
+            </div>
+            <div id="screenerResults" class="grid grid-cols-1 gap-4"></div>
         </div>
 
-        <div id="screenerResults" class="grid grid-cols-1 gap-4">
+        <div id="tab-retire" class="page-content hidden space-y-4">
+            <div class="bg-[#1e293b] p-5 rounded-2xl border border-slate-700/50 shadow-lg">
+                <h3 class="text-sm font-bold text-slate-300 mb-4 border-b border-slate-700 pb-2">參數設定</h3>
+                <div class="space-y-4 text-sm text-slate-300">
+                    <div class="flex justify-between items-center"><label>目前年齡</label><input type="number" id="ageCurrent" onchange="saveSettings()" class="w-16 bg-[#0f172a] border border-slate-600 rounded-lg px-2 py-1 text-center text-white"></div>
+                    <div class="flex justify-between items-center"><label>退休年齡</label><input type="number" id="ageRetire" onchange="saveSettings()" class="w-16 bg-[#0f172a] border border-slate-600 rounded-lg px-2 py-1 text-center text-white"></div>
+                    <div class="flex justify-between items-center"><label>目標被動收入 (月)</label><input type="number" id="targetIncome" onchange="saveSettings()" class="w-24 bg-[#0f172a] border border-slate-600 rounded-lg px-2 py-1 text-center text-white"></div>
+                    <div class="flex justify-between items-center"><label>預估投資報酬率 (%)</label><input type="number" id="expectedReturn" onchange="saveSettings()" step="0.5" class="w-20 bg-[#0f172a] border border-slate-600 rounded-lg px-2 py-1 text-center text-white"></div>
+                    <div class="flex justify-between items-center border-t border-slate-700 pt-3 mt-3"><label class="text-blue-400 font-bold">緊急備用金</label><input type="number" id="emergencyFund" onchange="saveSettings()" step="10000" class="w-24 bg-[#0f172a] border border-slate-600 rounded-lg px-2 py-1 text-center text-blue-400"></div>
+                </div>
+                <button onclick="calculateRetirement()" class="w-full mt-6 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold transition">開始試算</button>
             </div>
-    </div>
+            <div id="retirementResult" class="hidden bg-[#0f172a] p-5 rounded-2xl border-l-4 border-blue-500 shadow-lg">
+                <p class="text-slate-400 text-xs mb-1">目標總資產 (含備用金)：</p><p class="text-lg font-bold text-white mb-3">NT$ <span id="targetCorpus">0</span></p>
+                <p class="text-slate-400 text-xs mb-1">為了在 <span id="yearsLeft" class="text-slate-200"></span> 年後退休，每月需投入：</p>
+                <p class="text-3xl font-black text-blue-400">NT$ <span id="monthlyRequired">0</span></p>
+            </div>
+        </div>
+    </main>
+
+    <nav class="fixed bottom-0 w-full bg-[#1e293b] border-t border-slate-700/80 px-2 py-3 flex justify-around items-center z-20 pb-safe">
+        <button onclick="switchTab('portfolio', '我的持倉', '巴菲特 × 林奇 投資雷達')" class="nav-btn active flex flex-col items-center gap-1 w-16 text-blue-500 transition" data-target="tab-portfolio"><svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M4 3a2 2 0 100 4h12a2 2 0 100-4H4z" /><path fill-rule="evenodd" d="M3 8h14v7a2 2 0 01-2 2H5a2 2 0 01-2-2V8zm5 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" clip-rule="evenodd" /></svg><span class="text-[10px] font-medium">持倉</span></button>
+        <button onclick="switchTab('radar', '每日選股雷達', 'AI 新聞與技術面綜合研判')" class="nav-btn flex flex-col items-center gap-1 w-16 text-slate-500 hover:text-slate-300 transition" data-target="tab-radar"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg><span class="text-[10px] font-medium">雷達</span></button>
+        <button onclick="switchTab('explore', '單一標的探索', '個股深入分析報告')" class="nav-btn flex flex-col items-center gap-1 w-16 text-slate-500 hover:text-slate-300 transition" data-target="tab-explore"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg><span class="text-[10px] font-medium">探索</span></button>
+        <button onclick="switchTab('screener', '條件篩選器', '大師基本面選股策略')" class="nav-btn flex flex-col items-center gap-1 w-16 text-slate-500 hover:text-slate-300 transition" data-target="tab-screener"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg><span class="text-[10px] font-medium">篩選</span></button>
+        <button onclick="switchTab('retire', '退休財務規劃', '動態調整您的自由藍圖')" class="nav-btn flex flex-col items-center gap-1 w-16 text-slate-500 hover:text-slate-300 transition" data-target="tab-retire"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"></path></svg><span class="text-[10px] font-medium">退休</span></button>
+    </nav>
 
     <script>
         const BACKEND_URL = "https://my-ai-finance.onrender.com";
 
-        // === 🎩 大師篩選邏輯 ===
+        // === 📱 介面切換與初始化 ===
+        function switchTab(tabId, title, subtitle) {
+            document.querySelectorAll('.page-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.nav-btn').forEach(btn => { btn.classList.remove('text-blue-500'); btn.classList.add('text-slate-500'); });
+            document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+            document.querySelector(`[data-target="tab-${tabId}"]`).classList.remove('text-slate-500'); document.querySelector(`[data-target="tab-${tabId}"]`).classList.add('text-blue-500');
+            document.getElementById('pageTitle').innerText = title; document.getElementById('pageSubtitle').innerText = subtitle;
+        }
+
+        let portfolioAssets = JSON.parse(localStorage.getItem('myPortfolio')) || [];
+        let searchHistory = JSON.parse(localStorage.getItem('searchHistory')) || [];
+        let savedRadarList = localStorage.getItem('radarList') || "2330.TW, 2317.TW, 0050.TW, AAPL, NVDA";
+        let appSettings = JSON.parse(localStorage.getItem('appSettings')) || { ageCurrent: 34, ageRetire: 60, targetIncome: 30000, expectedReturn: 10, emergencyFund: 180000 };
+        let currentTotalPortfolioValue = parseFloat(localStorage.getItem('lastPortfolioValue')) || 0;
+
+        window.onload = function() {
+            updateAssetListUI(); loadSettingsToUI(); renderSearchHistory();
+            document.getElementById('radarListInput').value = savedRadarList;
+            if(currentTotalPortfolioValue > 0) document.getElementById('totalValueDisplay').innerText = currentTotalPortfolioValue.toLocaleString();
+        };
+
+        // === 💰 持倉與損益 ===
+        function savePortfolio() { localStorage.setItem('myPortfolio', JSON.stringify(portfolioAssets)); }
+        function addAsset() {
+            const ticker = document.getElementById('portTicker').value.toUpperCase().trim();
+            const shares = parseFloat(document.getElementById('portShares').value);
+            const cost = parseFloat(document.getElementById('portCost').value) || 0;
+            if (ticker && shares > 0) {
+                const existing = portfolioAssets.findIndex(a => a.ticker === ticker);
+                if (existing > -1) { portfolioAssets[existing].shares += shares; portfolioAssets[existing].cost = cost; } 
+                else portfolioAssets.push({ ticker, shares, cost });
+                savePortfolio(); updateAssetListUI();
+                document.getElementById('portTicker').value = ''; document.getElementById('portShares').value = ''; document.getElementById('portCost').value = '';
+            }
+        }
+        function removeAsset(index) { portfolioAssets.splice(index, 1); savePortfolio(); updateAssetListUI(); }
+        function updateAssetListUI() {
+            const list = document.getElementById('assetList'); list.innerHTML = '';
+            portfolioAssets.forEach((asset, index) => {
+                let costText = asset.cost > 0 ? `成本 $${asset.cost}` : '未填成本';
+                list.innerHTML += `<li class="flex justify-between items-center bg-[#1e293b] p-3 rounded-xl border border-slate-700/50"><div><span class="font-bold text-slate-200">${asset.ticker}</span><span class="text-slate-500 ml-2 text-xs">${asset.shares} 股 / ${costText}</span></div><button onclick="removeAsset(${index})" class="text-slate-500 hover:text-red-400 p-1">✕</button></li>`;
+            });
+        }
+        async function syncAndAnalyze() {
+            if (portfolioAssets.length === 0) return alert("請先新增持倉！");
+            const btn = document.getElementById('syncBtn'); btn.innerHTML = "⏳ 同步中...";
+            try {
+                const res = await fetch(`${BACKEND_URL}/calculate_portfolio`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: portfolioAssets }) });
+                const data = await res.json();
+                currentTotalPortfolioValue = data.total_portfolio_value;
+                document.getElementById('totalValueDisplay').innerText = currentTotalPortfolioValue.toLocaleString();
+                localStorage.setItem('lastPortfolioValue', currentTotalPortfolioValue);
+                const plEl = document.getElementById('totalPLDisplay'); const plValue = data.total_profit_loss; const plRatio = data.profit_loss_ratio;
+                plEl.innerText = `${plValue > 0 ? '+' : ''}${plValue.toLocaleString()} (${plRatio}%)`;
+                plEl.className = plValue > 0 ? "text-xl font-bold text-red-500" : (plValue < 0 ? "text-xl font-bold text-green-500" : "text-xl font-bold text-slate-400");
+            } catch (e) { alert("連線異常，伺服器可能正在休眠喚醒中，請稍待 30 秒再試。"); } finally { btn.innerHTML = "🔄 一鍵更新市值與損益"; }
+        }
+
+        // === 📡 AI 雷達 ===
+        function saveRadarList() { localStorage.setItem('radarList', document.getElementById('radarListInput').value); }
+        async function startRadar() {
+            const listStr = document.getElementById('radarListInput').value;
+            const tickers = listStr.split(',').map(t => t.trim().toUpperCase()).filter(t => t);
+            if(tickers.length === 0) return alert("請輸入代號！");
+            const btn = document.getElementById('radarBtn'); const progress = document.getElementById('radarProgress');
+            btn.disabled = true; btn.innerHTML = "⏳ 掃描中..."; progress.classList.remove('hidden');
+            document.getElementById('radarResults').innerHTML = ''; let foundCount = 0;
+            for(const ticker of tickers) {
+                document.getElementById('radarCurrentStock').innerText = `(${ticker})`;
+                try {
+                    const res = await fetch(`${BACKEND_URL}/analyze/${ticker}`); const data = await res.json();
+                    if(!data.error && (data.final_signal.includes("強烈建議") || data.final_signal.includes("技術面轉強"))) {
+                        foundCount++;
+                        let border = data.final_signal.includes("強烈建議") ? "border-green-500" : "border-indigo-500";
+                        document.getElementById('radarResults').innerHTML += `<div class="bg-[#1e293b] p-4 rounded-xl border-l-4 ${border} shadow-lg"><h4 class="font-bold text-white">${data.stock} <span class="text-xs text-slate-400 bg-[#0f172a] px-2 py-1 rounded border border-slate-700">$${data.technical_analysis.price}</span></h4><p class="text-sm font-bold text-indigo-400 my-2">${data.final_signal}</p><div class="text-[11px] grid grid-cols-2 gap-2 text-slate-400"><div>📈 趨勢: ${data.technical_analysis.trend}</div><div>📊 RSI: ${data.technical_analysis.rsi_14}</div></div></div>`;
+                    }
+                } catch(e) {}
+                await new Promise(r => setTimeout(r, 1500));
+            }
+            if(foundCount === 0) document.getElementById('radarResults').innerHTML = `<div class="col-span-full bg-[#1e293b] p-6 rounded-xl text-center border border-slate-700"><p class="text-slate-300 font-bold">今日市場訊號平淡，無強勢標的。</p></div>`;
+            progress.classList.add('hidden'); btn.disabled = false; btn.innerHTML = "🚀 重新掃描";
+        }
+
+        // === 🔍 單一探索 ===
+        function renderSearchHistory() {
+            const container = document.getElementById('searchHistoryContainer'); container.innerHTML = '';
+            searchHistory.forEach(t => container.innerHTML += `<button onclick="searchFromHistory('${t}')" class="bg-[#0f172a] border border-slate-700 hover:border-blue-500 text-slate-400 px-2 py-1 rounded-md">${t}</button>`);
+        }
+        function searchFromHistory(t) { document.getElementById('tickerInput').value = t; analyzeStock(); }
+        async function analyzeStock() {
+            const ticker = document.getElementById('tickerInput').value.trim().toUpperCase(); if(!ticker) return;
+            document.getElementById('loading').classList.remove('hidden'); document.getElementById('resultArea').classList.add('hidden');
+            try {
+                const res = await fetch(`${BACKEND_URL}/analyze/${ticker}`); const data = await res.json();
+                if(data.error) return alert(data.error);
+                document.getElementById('stockName').innerText = data.stock; document.getElementById('finalSignal').innerText = data.final_signal; document.getElementById('priceLabel').innerText = `$${data.technical_analysis.price}`; document.getElementById('sma').innerText = data.technical_analysis.sma_20; document.getElementById('rsi').innerText = data.technical_analysis.rsi_14; document.getElementById('newsScore').innerText = data.news_analysis.average_sentiment_score; document.getElementById('sentimentLabel').innerText = data.news_analysis.market_sentiment; document.getElementById('resultArea').classList.remove('hidden');
+                searchHistory = [ticker, ...searchHistory.filter(t => t !== ticker)].slice(0, 5); localStorage.setItem('searchHistory', JSON.stringify(searchHistory)); renderSearchHistory();
+            } catch (e) { alert("連線失敗"); } finally { document.getElementById('loading').classList.add('hidden'); }
+        }
+
+        // === 🎩 大師篩選器 ===
         const SEED_LISTS = {
             'TW': ['2330.TW', '2317.TW', '2454.TW', '2308.TW', '2881.TW', '2882.TW', '2382.TW', '2357.TW', '2412.TW', '1301.TW'],
             'US': ['AAPL', 'NVDA', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'AVGO', 'COST', 'NFLX']
         };
-
         async function runScreener(market) {
             const tickers = SEED_LISTS[market];
             const resultsContainer = document.getElementById('screenerResults');
             const progress = document.getElementById('screenerProgress');
-            const currentSpan = document.getElementById('currentScanning');
-
-            resultsContainer.innerHTML = '';
-            progress.classList.remove('hidden');
-
+            resultsContainer.innerHTML = ''; progress.classList.remove('hidden');
             for (const ticker of tickers) {
-                currentSpan.innerText = ticker;
+                document.getElementById('currentScanning').innerText = ticker;
                 try {
-                    const res = await fetch(`${BACKEND_URL}/analyze/${ticker}`);
-                    const data = await res.json();
-
-                    if (!data.error && data.fundamentals.tags.length > 0) {
-                        resultsContainer.innerHTML += `
-                            <div class="bg-[#1e293b] p-4 rounded-xl border-l-4 border-yellow-500 shadow-md">
-                                <div class="flex justify-between items-center mb-2">
-                                    <h4 class="font-bold text-white text-lg">${data.stock}</h4>
-                                    <span class="text-xs text-slate-400">ROE: ${data.fundamentals.roe}</span>
-                                </div>
-                                <div class="flex flex-wrap gap-2 mb-3">
-                                    ${data.fundamentals.tags.map(tag => `<span class="bg-indigo-900/50 text-indigo-300 text-[10px] px-2 py-0.5 rounded border border-indigo-700">${tag}</span>`).join('')}
-                                </div>
-                                <p class="text-sm font-bold text-green-400">${data.final_signal}</p>
-                            </div>
-                        `;
+                    const res = await fetch(`${BACKEND_URL}/analyze/${ticker}`); const data = await res.json();
+                    if (!data.error && data.fundamentals && data.fundamentals.tags && data.fundamentals.tags.length > 0) {
+                        resultsContainer.innerHTML += `<div class="bg-[#1e293b] p-4 rounded-xl border-l-4 border-yellow-500 shadow-md"><div class="flex justify-between"><h4 class="font-bold text-white">${data.stock}</h4><span class="text-xs text-slate-400">ROE: ${data.fundamentals.roe}</span></div><div class="flex gap-2 my-2">${data.fundamentals.tags.map(tag => `<span class="bg-indigo-900/50 text-indigo-300 text-[10px] px-2 py-0.5 rounded">${tag}</span>`).join('')}</div><p class="text-sm font-bold text-green-400">${data.final_signal}</p></div>`;
                     }
-                } catch (e) { console.error(e); }
-                // 保護伺服器，每檔休息 2 秒
+                } catch (e) {}
                 await new Promise(r => setTimeout(r, 2000));
             }
-
-            if (resultsContainer.innerHTML === '') {
-                resultsContainer.innerHTML = '<div class="text-center text-slate-500 py-10">目前暫無符合大師嚴選條件的標的。</div>';
-            }
+            if (resultsContainer.innerHTML === '') resultsContainer.innerHTML = '<div class="text-center text-slate-500 py-10">目前無符合條件標的</div>';
             progress.classList.add('hidden');
         }
 
-        // ... (原本的分頁切換、持倉計算、退休邏輯請務必保留) ...
-        function switchTab(tabId, title, subtitle) {
-            document.querySelectorAll('.page-content').forEach(el => el.classList.add('hidden'));
-            document.querySelectorAll('.nav-btn').forEach(btn => {
-                btn.classList.remove('text-blue-500'); btn.classList.add('text-slate-500');
-            });
-            document.getElementById(`tab-${tabId}`).classList.remove('hidden');
-            document.querySelector(`[data-target="tab-${tabId}"]`).classList.remove('text-slate-500');
-            document.querySelector(`[data-target="tab-${tabId}"]`).classList.add('text-blue-500');
-            document.getElementById('pageTitle').innerText = title;
-            document.getElementById('pageSubtitle').innerText = subtitle;
+        // === 🎯 退休金 ===
+        function loadSettingsToUI() { document.getElementById('ageCurrent').value = appSettings.ageCurrent; document.getElementById('ageRetire').value = appSettings.ageRetire; document.getElementById('targetIncome').value = appSettings.targetIncome; document.getElementById('expectedReturn').value = appSettings.expectedReturn; document.getElementById('emergencyFund').value = appSettings.emergencyFund; }
+        function saveSettings() { appSettings = { ageCurrent: document.getElementById('ageCurrent').value, ageRetire: document.getElementById('ageRetire').value, targetIncome: document.getElementById('targetIncome').value, expectedReturn: document.getElementById('expectedReturn').value, emergencyFund: document.getElementById('emergencyFund').value }; localStorage.setItem('appSettings', JSON.stringify(appSettings)); }
+        function calculateRetirement() {
+            const cAge = parseInt(document.getElementById('ageCurrent').value); const rAge = parseInt(document.getElementById('ageRetire').value);
+            const targetIncome = parseInt(document.getElementById('targetIncome').value); const expectedReturn = parseFloat(document.getElementById('expectedReturn').value) / 100;
+            const emergency = parseInt(document.getElementById('emergencyFund').value) || 0;
+            const years = rAge - cAge; if(years <= 0) return alert("退休年紀需大於目前年紀！");
+            const targetCorpus = ((targetIncome * 12) / 0.05) + emergency; const mRate = expectedReturn / 12; const months = years * 12;
+            const fv = currentTotalPortfolioValue * Math.pow(1 + expectedReturn, years); const needed = targetCorpus - fv;
+            let pmt = 0; if (needed > 0) pmt = (needed * mRate) / (Math.pow(1 + mRate, months) - 1);
+            document.getElementById('targetCorpus').innerText = Math.round(targetCorpus).toLocaleString(); document.getElementById('yearsLeft').innerText = years; document.getElementById('monthlyRequired').innerText = pmt > 0 ? Math.round(pmt).toLocaleString() : "0 (達標！)"; document.getElementById('retirementResult').classList.remove('hidden');
         }
     </script>
 </body>
