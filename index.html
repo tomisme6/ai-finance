@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI 財務自由雷達 (終極完整版)</title>
+    <title>AI 財務自由雷達 (終極大師版)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         ::-webkit-scrollbar { display: none; }
@@ -43,10 +43,10 @@
                 </div>
             </div>
 
-            <h3 class="text-sm font-bold text-slate-400 mt-6 mb-2 px-1">現有資產</h3>
-            <ul id="assetList" class="space-y-2"></ul>
+            <h3 class="text-sm font-bold text-slate-400 mt-6 mb-2 px-1">現有資產與 AI 健檢建議</h3>
+            <ul id="assetList" class="space-y-3"></ul>
             
-            <button onclick="syncAndAnalyze()" id="syncBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl transition shadow-lg font-bold mt-4">🔄 一鍵更新市值與損益</button>
+            <button onclick="syncAndAnalyze()" id="syncBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl transition shadow-lg font-bold mt-4">🔄 一鍵更新市值與啟動 AI 健檢</button>
         </div>
 
         <div id="tab-radar" class="page-content hidden space-y-4">
@@ -139,6 +139,7 @@
             document.getElementById('pageTitle').innerText = title; document.getElementById('pageSubtitle').innerText = subtitle;
         }
 
+        // 資料模型：為每個資產增加 signal 屬性
         let portfolioAssets = JSON.parse(localStorage.getItem('myPortfolio')) || [];
         let searchHistory = JSON.parse(localStorage.getItem('searchHistory')) || [];
         let savedRadarList = localStorage.getItem('radarList') || "2330.TW, 2317.TW, 0050.TW, AAPL, NVDA";
@@ -151,41 +152,103 @@
             if(currentTotalPortfolioValue > 0) document.getElementById('totalValueDisplay').innerText = currentTotalPortfolioValue.toLocaleString();
         };
 
-        // === 💰 持倉與損益 ===
+        // === 💰 持倉與損益健檢 ===
         function savePortfolio() { localStorage.setItem('myPortfolio', JSON.stringify(portfolioAssets)); }
+        
         function addAsset() {
             const ticker = document.getElementById('portTicker').value.toUpperCase().trim();
             const shares = parseFloat(document.getElementById('portShares').value);
             const cost = parseFloat(document.getElementById('portCost').value) || 0;
             if (ticker && shares > 0) {
                 const existing = portfolioAssets.findIndex(a => a.ticker === ticker);
-                if (existing > -1) { portfolioAssets[existing].shares += shares; portfolioAssets[existing].cost = cost; } 
-                else portfolioAssets.push({ ticker, shares, cost });
+                if (existing > -1) { portfolioAssets[existing].shares += shares; portfolioAssets[existing].cost = cost; portfolioAssets[existing].signal = null; } 
+                else portfolioAssets.push({ ticker, shares, cost, signal: null });
                 savePortfolio(); updateAssetListUI();
                 document.getElementById('portTicker').value = ''; document.getElementById('portShares').value = ''; document.getElementById('portCost').value = '';
             }
         }
+        
         function removeAsset(index) { portfolioAssets.splice(index, 1); savePortfolio(); updateAssetListUI(); }
+        
+        // 渲染持股卡片，包含 AI 建議區塊
         function updateAssetListUI() {
             const list = document.getElementById('assetList'); list.innerHTML = '';
             portfolioAssets.forEach((asset, index) => {
                 let costText = asset.cost > 0 ? `成本 $${asset.cost}` : '未填成本';
-                list.innerHTML += `<li class="flex justify-between items-center bg-[#1e293b] p-3 rounded-xl border border-slate-700/50"><div><span class="font-bold text-slate-200">${asset.ticker}</span><span class="text-slate-500 ml-2 text-xs">${asset.shares} 股 / ${costText}</span></div><button onclick="removeAsset(${index})" class="text-slate-500 hover:text-red-400 p-1">✕</button></li>`;
+                let signalHtml = asset.signal ? `<div class="mt-2 text-[11px] bg-[#0f172a] p-2 rounded border border-slate-700/50">${asset.signal}</div>` : '';
+                
+                list.innerHTML += `
+                <li class="flex flex-col bg-[#1e293b] p-3 rounded-xl border border-slate-700/50 shadow-sm">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <span class="font-bold text-slate-200">${asset.ticker}</span>
+                            <span class="text-slate-500 ml-2 text-xs">${asset.shares} 股 / ${costText}</span>
+                        </div>
+                        <button onclick="removeAsset(${index})" class="text-slate-500 hover:text-red-400 p-1">✕</button>
+                    </div>
+                    <div id="advice-${index}">
+                        ${signalHtml}
+                    </div>
+                </li>`;
             });
         }
+
+        // 翻譯後端訊號為明確的操作建議
+        function translateSignalToAction(signal) {
+            if (signal.includes("強烈建議")) return `<span class="text-green-400 font-bold">✅ 建議買進 / 續抱：</span> ${signal}`;
+            if (signal.includes("留意追高")) return `<span class="text-yellow-400 font-bold">⚠️ 逢高留意 / 停利：</span> ${signal}`;
+            if (signal.includes("觀望") || signal.includes("轉弱")) return `<span class="text-red-400 font-bold">🛑 建議減碼 / 換股：</span> ${signal}`;
+            if (signal.includes("反彈契機")) return `<span class="text-blue-400 font-bold">💡 持有觀望 / 勿殺低：</span> ${signal}`;
+            return `<span class="text-indigo-400 font-bold">👀 建議：</span> ${signal}`;
+        }
+
         async function syncAndAnalyze() {
             if (portfolioAssets.length === 0) return alert("請先新增持倉！");
-            const btn = document.getElementById('syncBtn'); btn.innerHTML = "⏳ 同步中...";
+            const btn = document.getElementById('syncBtn'); 
+            
+            // 階段一：同步市值
+            btn.innerHTML = "⏳ 步驟 1/2：結算最新市值中...";
             try {
                 const res = await fetch(`${BACKEND_URL}/calculate_portfolio`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: portfolioAssets }) });
                 const data = await res.json();
                 currentTotalPortfolioValue = data.total_portfolio_value;
                 document.getElementById('totalValueDisplay').innerText = currentTotalPortfolioValue.toLocaleString();
                 localStorage.setItem('lastPortfolioValue', currentTotalPortfolioValue);
+                
                 const plEl = document.getElementById('totalPLDisplay'); const plValue = data.total_profit_loss; const plRatio = data.profit_loss_ratio;
                 plEl.innerText = `${plValue > 0 ? '+' : ''}${plValue.toLocaleString()} (${plRatio}%)`;
                 plEl.className = plValue > 0 ? "text-xl font-bold text-red-500" : (plValue < 0 ? "text-xl font-bold text-green-500" : "text-xl font-bold text-slate-400");
-            } catch (e) { alert("連線異常，伺服器可能正在休眠喚醒中，請稍待 30 秒再試。"); } finally { btn.innerHTML = "🔄 一鍵更新市值與損益"; }
+                
+                // 階段二：逐一進行 AI 健檢
+                btn.innerHTML = "⏳ 步驟 2/2：AI 正在為每一檔持股把脈...";
+                for (let i = 0; i < portfolioAssets.length; i++) {
+                    const asset = portfolioAssets[i];
+                    const adviceEl = document.getElementById(`advice-${i}`);
+                    if (adviceEl) adviceEl.innerHTML = `<div class="mt-2 text-[11px] text-indigo-400 animate-pulse">正在連線診斷中...</div>`;
+
+                    try {
+                        const analyzeRes = await fetch(`${BACKEND_URL}/analyze/${asset.ticker}`);
+                        const analyzeData = await analyzeRes.json();
+                        if (!analyzeData.error) {
+                            const actionableAdvice = translateSignalToAction(analyzeData.final_signal);
+                            portfolioAssets[i].signal = actionableAdvice;
+                            if (adviceEl) adviceEl.innerHTML = `<div class="mt-2 text-[11px] bg-[#0f172a] p-2 rounded border border-slate-700/50">${actionableAdvice}</div>`;
+                        } else {
+                            if (adviceEl) adviceEl.innerHTML = `<div class="mt-2 text-[11px] text-red-400">無法取得健檢資料</div>`;
+                        }
+                    } catch(e) {
+                        if (adviceEl) adviceEl.innerHTML = `<div class="mt-2 text-[11px] text-red-400">連線超時</div>`;
+                    }
+                    // 保護伺服器，間隔 1.5 秒
+                    await new Promise(r => setTimeout(r, 1500));
+                }
+                savePortfolio(); // 存下最新的健檢結果
+
+            } catch (e) { 
+                alert("連線異常，伺服器可能正在休眠喚醒中，請稍待 30 秒再試。"); 
+            } finally { 
+                btn.innerHTML = "🔄 一鍵更新市值與啟動 AI 健檢"; 
+            }
         }
 
         // === 📡 AI 雷達 ===
