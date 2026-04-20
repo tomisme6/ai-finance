@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI 財務自由雷達 (終極大師版)</title>
+    <title>AI 財務自由雷達 (中文名稱升級版)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         ::-webkit-scrollbar { display: none; }
@@ -34,7 +34,10 @@
             <div class="bg-[#1e293b] p-5 rounded-2xl border border-slate-700/50 shadow-lg mt-4">
                 <h3 class="text-sm font-bold text-slate-300 mb-4">新增持倉</h3>
                 <div class="space-y-3">
-                    <input type="text" id="portTicker" placeholder="代號：0050、AAPL..." class="w-full bg-[#0f172a] border border-slate-600 rounded-xl px-4 py-3 text-white focus:border-blue-500 focus:outline-none">
+                    <div class="relative">
+                        <input type="text" id="portTicker" oninput="previewName(this.value, 'portNamePreview')" placeholder="代號：0050、AAPL..." class="w-full bg-[#0f172a] border border-slate-600 rounded-xl px-4 py-3 text-white focus:border-blue-500 focus:outline-none pr-24 uppercase">
+                        <span id="portNamePreview" class="absolute right-4 top-3.5 text-sm text-blue-400 font-bold pointer-events-none truncate max-w-[100px]"></span>
+                    </div>
                     <div class="grid grid-cols-2 gap-3">
                         <input type="number" id="portShares" placeholder="股數 / 單位" class="bg-[#0f172a] border border-slate-600 rounded-xl px-4 py-3 text-white focus:border-blue-500 focus:outline-none">
                         <input type="number" id="portCost" placeholder="成本價 (選填)" class="bg-[#0f172a] border border-slate-600 rounded-xl px-4 py-3 text-white focus:border-blue-500 focus:outline-none">
@@ -55,7 +58,7 @@
                 <p class="text-xs text-slate-400 mb-4">掃描下方清單，自動篩選「技術面轉強」或「消息面偏多」的潛力標的。</p>
                 <div class="mb-4">
                     <label class="text-xs font-bold text-indigo-400 block mb-2">雷達掃描清單 (請用逗號分隔代號)</label>
-                    <textarea id="radarListInput" onchange="saveRadarList()" class="w-full bg-[#0f172a] border border-slate-600 rounded-xl px-3 py-3 text-slate-300 text-sm focus:border-indigo-500 focus:outline-none" rows="3" placeholder="例如: 2330.TW, AAPL, NVDA"></textarea>
+                    <textarea id="radarListInput" onchange="saveRadarList()" class="w-full bg-[#0f172a] border border-slate-600 rounded-xl px-3 py-3 text-slate-300 text-sm focus:border-indigo-500 focus:outline-none uppercase" rows="3" placeholder="例如: 2330.TW, AAPL, NVDA"></textarea>
                 </div>
                 <button onclick="startRadar()" id="radarBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-xl transition shadow-lg font-bold">🚀 啟動今日雷達掃描</button>
             </div>
@@ -66,7 +69,10 @@
         <div id="tab-explore" class="page-content hidden space-y-4">
             <div class="bg-[#1e293b] p-5 rounded-2xl border border-slate-700/50 shadow-lg">
                 <div class="flex gap-2 mb-4">
-                    <input type="text" id="tickerInput" placeholder="輸入標的 (如 2330.TW)" class="flex-1 bg-[#0f172a] border border-slate-600 rounded-xl px-4 py-3 text-white focus:border-blue-500 focus:outline-none">
+                    <div class="relative flex-1">
+                        <input type="text" id="tickerInput" oninput="previewName(this.value, 'exploreNamePreview')" placeholder="輸入標的 (如 2330.TW)" class="w-full bg-[#0f172a] border border-slate-600 rounded-xl px-4 py-3 text-white focus:border-blue-500 focus:outline-none pr-24 uppercase">
+                        <span id="exploreNamePreview" class="absolute right-4 top-3.5 text-sm text-blue-400 font-bold pointer-events-none truncate max-w-[100px]"></span>
+                    </div>
                     <button onclick="analyzeStock()" class="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 font-bold">搜尋</button>
                 </div>
                 <div id="searchHistoryContainer" class="flex flex-wrap gap-2 text-xs text-slate-400 mb-2"></div>
@@ -130,6 +136,36 @@
     <script>
         const BACKEND_URL = "https://my-ai-finance.onrender.com";
 
+        // === 🌟 核心升級：Yahoo API 即時名稱抓取系統 ===
+        let typingTimer;
+        
+        async function fetchChineseName(ticker) {
+            if (!ticker) return "";
+            try {
+                // 利用前端直接呼叫 Yahoo 搜尋 API，速度極快且不需經過自己後端
+                const res = await fetch(`https://query2.finance.yahoo.com/v1/finance/search?q=${ticker}&lang=zh-Hant-TW&region=TW`);
+                const data = await res.json();
+                if (data.quotes && data.quotes.length > 0) {
+                    return data.quotes[0].shortname || data.quotes[0].longname || "";
+                }
+            } catch (e) { console.log("名稱抓取失敗"); }
+            return "";
+        }
+
+        // 打字時的動態預覽
+        function previewName(ticker, targetId) {
+            clearTimeout(typingTimer);
+            const el = document.getElementById(targetId);
+            if(!ticker.trim()) { el.innerText = ''; return; }
+            el.innerText = '搜尋中...';
+            
+            // 設定 0.6 秒延遲，避免使用者打太快狂送請求
+            typingTimer = setTimeout(async () => {
+                const name = await fetchChineseName(ticker.trim());
+                el.innerText = name;
+            }, 600);
+        }
+
         // === 📱 介面切換與初始化 ===
         function switchTab(tabId, title, subtitle) {
             document.querySelectorAll('.page-content').forEach(el => el.classList.add('hidden'));
@@ -139,7 +175,6 @@
             document.getElementById('pageTitle').innerText = title; document.getElementById('pageSubtitle').innerText = subtitle;
         }
 
-        // 資料模型：為每個資產增加 signal 屬性
         let portfolioAssets = JSON.parse(localStorage.getItem('myPortfolio')) || [];
         let searchHistory = JSON.parse(localStorage.getItem('searchHistory')) || [];
         let savedRadarList = localStorage.getItem('radarList') || "2330.TW, 2317.TW, 0050.TW, AAPL, NVDA";
@@ -155,45 +190,55 @@
         // === 💰 持倉與損益健檢 ===
         function savePortfolio() { localStorage.setItem('myPortfolio', JSON.stringify(portfolioAssets)); }
         
-        function addAsset() {
+        async function addAsset() {
             const ticker = document.getElementById('portTicker').value.toUpperCase().trim();
             const shares = parseFloat(document.getElementById('portShares').value);
             const cost = parseFloat(document.getElementById('portCost').value) || 0;
+            
+            // 🌟 寫入庫存時，把中文名稱一起存進去
+            let name = document.getElementById('portNamePreview').innerText;
+            if (name === '搜尋中...' || !name) name = await fetchChineseName(ticker);
+
             if (ticker && shares > 0) {
                 const existing = portfolioAssets.findIndex(a => a.ticker === ticker);
-                if (existing > -1) { portfolioAssets[existing].shares += shares; portfolioAssets[existing].cost = cost; portfolioAssets[existing].signal = null; } 
-                else portfolioAssets.push({ ticker, shares, cost, signal: null });
+                if (existing > -1) { 
+                    portfolioAssets[existing].shares += shares; 
+                    portfolioAssets[existing].cost = cost; 
+                    portfolioAssets[existing].signal = null; 
+                    if(name) portfolioAssets[existing].name = name;
+                } 
+                else portfolioAssets.push({ ticker, shares, cost, signal: null, name });
+                
                 savePortfolio(); updateAssetListUI();
                 document.getElementById('portTicker').value = ''; document.getElementById('portShares').value = ''; document.getElementById('portCost').value = '';
+                document.getElementById('portNamePreview').innerText = '';
             }
         }
         
         function removeAsset(index) { portfolioAssets.splice(index, 1); savePortfolio(); updateAssetListUI(); }
         
-        // 渲染持股卡片，包含 AI 建議區塊
         function updateAssetListUI() {
             const list = document.getElementById('assetList'); list.innerHTML = '';
             portfolioAssets.forEach((asset, index) => {
                 let costText = asset.cost > 0 ? `成本 $${asset.cost}` : '未填成本';
                 let signalHtml = asset.signal ? `<div class="mt-2 text-[11px] bg-[#0f172a] p-2 rounded border border-slate-700/50">${asset.signal}</div>` : '';
+                // 🌟 顯示時加入中文名稱
+                let nameHtml = asset.name ? `<span class="text-blue-400 ml-1.5">${asset.name}</span>` : '';
                 
                 list.innerHTML += `
                 <li class="flex flex-col bg-[#1e293b] p-3 rounded-xl border border-slate-700/50 shadow-sm">
                     <div class="flex justify-between items-center">
                         <div>
-                            <span class="font-bold text-slate-200">${asset.ticker}</span>
+                            <span class="font-bold text-slate-200">${asset.ticker}</span>${nameHtml}
                             <span class="text-slate-500 ml-2 text-xs">${asset.shares} 股 / ${costText}</span>
                         </div>
                         <button onclick="removeAsset(${index})" class="text-slate-500 hover:text-red-400 p-1">✕</button>
                     </div>
-                    <div id="advice-${index}">
-                        ${signalHtml}
-                    </div>
+                    <div id="advice-${index}">${signalHtml}</div>
                 </li>`;
             });
         }
 
-        // 翻譯後端訊號為明確的操作建議
         function translateSignalToAction(signal) {
             if (signal.includes("強烈建議")) return `<span class="text-green-400 font-bold">✅ 建議買進 / 續抱：</span> ${signal}`;
             if (signal.includes("留意追高")) return `<span class="text-yellow-400 font-bold">⚠️ 逢高留意 / 停利：</span> ${signal}`;
@@ -206,7 +251,6 @@
             if (portfolioAssets.length === 0) return alert("請先新增持倉！");
             const btn = document.getElementById('syncBtn'); 
             
-            // 階段一：同步市值
             btn.innerHTML = "⏳ 步驟 1/2：結算最新市值中...";
             try {
                 const res = await fetch(`${BACKEND_URL}/calculate_portfolio`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: portfolioAssets }) });
@@ -219,7 +263,6 @@
                 plEl.innerText = `${plValue > 0 ? '+' : ''}${plValue.toLocaleString()} (${plRatio}%)`;
                 plEl.className = plValue > 0 ? "text-xl font-bold text-red-500" : (plValue < 0 ? "text-xl font-bold text-green-500" : "text-xl font-bold text-slate-400");
                 
-                // 階段二：逐一進行 AI 健檢
                 btn.innerHTML = "⏳ 步驟 2/2：AI 正在為每一檔持股把脈...";
                 for (let i = 0; i < portfolioAssets.length; i++) {
                     const asset = portfolioAssets[i];
@@ -233,16 +276,11 @@
                             const actionableAdvice = translateSignalToAction(analyzeData.final_signal);
                             portfolioAssets[i].signal = actionableAdvice;
                             if (adviceEl) adviceEl.innerHTML = `<div class="mt-2 text-[11px] bg-[#0f172a] p-2 rounded border border-slate-700/50">${actionableAdvice}</div>`;
-                        } else {
-                            if (adviceEl) adviceEl.innerHTML = `<div class="mt-2 text-[11px] text-red-400">無法取得健檢資料</div>`;
                         }
-                    } catch(e) {
-                        if (adviceEl) adviceEl.innerHTML = `<div class="mt-2 text-[11px] text-red-400">連線超時</div>`;
-                    }
-                    // 保護伺服器，間隔 1.5 秒
+                    } catch(e) {}
                     await new Promise(r => setTimeout(r, 1500));
                 }
-                savePortfolio(); // 存下最新的健檢結果
+                savePortfolio(); 
 
             } catch (e) { 
                 alert("連線異常，伺服器可能正在休眠喚醒中，請稍待 30 秒再試。"); 
@@ -260,14 +298,19 @@
             const btn = document.getElementById('radarBtn'); const progress = document.getElementById('radarProgress');
             btn.disabled = true; btn.innerHTML = "⏳ 掃描中..."; progress.classList.remove('hidden');
             document.getElementById('radarResults').innerHTML = ''; let foundCount = 0;
+            
             for(const ticker of tickers) {
                 document.getElementById('radarCurrentStock').innerText = `(${ticker})`;
                 try {
                     const res = await fetch(`${BACKEND_URL}/analyze/${ticker}`); const data = await res.json();
                     if(!data.error && (data.final_signal.includes("強烈建議") || data.final_signal.includes("技術面轉強"))) {
                         foundCount++;
+                        // 🌟 顯示雷達卡片時，同步抓取中文名稱
+                        const localName = await fetchChineseName(ticker);
+                        const nameHtml = localName ? `<span class="text-blue-400 ml-1.5">${localName}</span>` : '';
+                        
                         let border = data.final_signal.includes("強烈建議") ? "border-green-500" : "border-indigo-500";
-                        document.getElementById('radarResults').innerHTML += `<div class="bg-[#1e293b] p-4 rounded-xl border-l-4 ${border} shadow-lg"><h4 class="font-bold text-white">${data.stock} <span class="text-xs text-slate-400 bg-[#0f172a] px-2 py-1 rounded border border-slate-700">$${data.technical_analysis.price}</span></h4><p class="text-sm font-bold text-indigo-400 my-2">${data.final_signal}</p><div class="text-[11px] grid grid-cols-2 gap-2 text-slate-400"><div>📈 趨勢: ${data.technical_analysis.trend}</div><div>📊 RSI: ${data.technical_analysis.rsi_14}</div></div></div>`;
+                        document.getElementById('radarResults').innerHTML += `<div class="bg-[#1e293b] p-4 rounded-xl border-l-4 ${border} shadow-lg"><h4 class="font-bold text-white text-lg">${data.stock}${nameHtml} <span class="text-xs text-slate-400 bg-[#0f172a] px-2 py-1 rounded border border-slate-700 ml-1">$${data.technical_analysis.price}</span></h4><p class="text-sm font-bold text-indigo-400 my-2">${data.final_signal}</p><div class="text-[11px] grid grid-cols-2 gap-2 text-slate-400"><div>📈 趨勢: ${data.technical_analysis.trend}</div><div>📊 RSI: ${data.technical_analysis.rsi_14}</div></div></div>`;
                     }
                 } catch(e) {}
                 await new Promise(r => setTimeout(r, 1500));
@@ -288,8 +331,17 @@
             try {
                 const res = await fetch(`${BACKEND_URL}/analyze/${ticker}`); const data = await res.json();
                 if(data.error) return alert(data.error);
-                document.getElementById('stockName').innerText = data.stock; document.getElementById('finalSignal').innerText = data.final_signal; document.getElementById('priceLabel').innerText = `$${data.technical_analysis.price}`; document.getElementById('sma').innerText = data.technical_analysis.sma_20; document.getElementById('rsi').innerText = data.technical_analysis.rsi_14; document.getElementById('newsScore').innerText = data.news_analysis.average_sentiment_score; document.getElementById('sentimentLabel').innerText = data.news_analysis.market_sentiment; document.getElementById('resultArea').classList.remove('hidden');
+                
+                // 🌟 探索結果加上中文名
+                const localName = document.getElementById('exploreNamePreview').innerText || await fetchChineseName(ticker);
+                let titleText = data.stock;
+                if(localName && localName !== '搜尋中...') titleText += ` <span class="text-blue-400 ml-2">${localName}</span>`;
+                
+                document.getElementById('stockName').innerHTML = titleText; 
+                document.getElementById('finalSignal').innerText = data.final_signal; document.getElementById('priceLabel').innerText = `$${data.technical_analysis.price}`; document.getElementById('sma').innerText = data.technical_analysis.sma_20; document.getElementById('rsi').innerText = data.technical_analysis.rsi_14; document.getElementById('newsScore').innerText = data.news_analysis.average_sentiment_score; document.getElementById('sentimentLabel').innerText = data.news_analysis.market_sentiment; document.getElementById('resultArea').classList.remove('hidden');
+                
                 searchHistory = [ticker, ...searchHistory.filter(t => t !== ticker)].slice(0, 5); localStorage.setItem('searchHistory', JSON.stringify(searchHistory)); renderSearchHistory();
+                document.getElementById('exploreNamePreview').innerText = ''; // 清除預覽
             } catch (e) { alert("連線失敗"); } finally { document.getElementById('loading').classList.add('hidden'); }
         }
 
@@ -308,7 +360,11 @@
                 try {
                     const res = await fetch(`${BACKEND_URL}/analyze/${ticker}`); const data = await res.json();
                     if (!data.error && data.fundamentals && data.fundamentals.tags && data.fundamentals.tags.length > 0) {
-                        resultsContainer.innerHTML += `<div class="bg-[#1e293b] p-4 rounded-xl border-l-4 border-yellow-500 shadow-md"><div class="flex justify-between"><h4 class="font-bold text-white">${data.stock}</h4><span class="text-xs text-slate-400">ROE: ${data.fundamentals.roe}</span></div><div class="flex gap-2 my-2">${data.fundamentals.tags.map(tag => `<span class="bg-indigo-900/50 text-indigo-300 text-[10px] px-2 py-0.5 rounded">${tag}</span>`).join('')}</div><p class="text-sm font-bold text-green-400">${data.final_signal}</p></div>`;
+                        // 🌟 篩選結果加上中文名
+                        const localName = await fetchChineseName(ticker);
+                        const nameHtml = localName ? `<span class="text-blue-400 ml-1.5 text-base">${localName}</span>` : '';
+                        
+                        resultsContainer.innerHTML += `<div class="bg-[#1e293b] p-4 rounded-xl border-l-4 border-yellow-500 shadow-md"><div class="flex justify-between items-center"><h4 class="font-bold text-white text-lg">${data.stock}${nameHtml}</h4><span class="text-xs text-slate-400">ROE: ${data.fundamentals.roe}</span></div><div class="flex gap-2 my-2">${data.fundamentals.tags.map(tag => `<span class="bg-indigo-900/50 text-indigo-300 text-[10px] px-2 py-0.5 rounded">${tag}</span>`).join('')}</div><p class="text-sm font-bold text-green-400">${data.final_signal}</p></div>`;
                     }
                 } catch (e) {}
                 await new Promise(r => setTimeout(r, 2000));
